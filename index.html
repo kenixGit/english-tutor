@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>English Tutor</title>
+    <script src="https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.umd.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .container {
+            text-align: center;
+            padding: 20px;
+            width: 100%;
+            max-width: 400px;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 40px;
+        }
+        .call-btn {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 30px rgba(0, 200, 150, 0.3);
+        }
+        .call-btn.idle {
+            background: linear-gradient(135deg, #00c896, #00a67e);
+        }
+        .call-btn.idle:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 40px rgba(0, 200, 150, 0.5);
+        }
+        .call-btn.connecting {
+            background: linear-gradient(135deg, #f0ad4e, #ec971f);
+            animation: pulse 1.5s infinite;
+        }
+        .call-btn.active {
+            background: linear-gradient(135deg, #ff4757, #c0392b);
+            animation: glow 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 71, 87, 0.4); }
+            50% { box-shadow: 0 0 40px rgba(255, 71, 87, 0.7); }
+        }
+        .status {
+            font-size: 16px;
+            color: #ccc;
+            margin-bottom: 10px;
+            min-height: 24px;
+        }
+        .timer {
+            font-size: 32px;
+            font-weight: 300;
+            color: #00c896;
+            margin-bottom: 20px;
+            min-height: 40px;
+            font-variant-numeric: tabular-nums;
+        }
+        .volume-bar {
+            width: 200px;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin: 0 auto;
+            overflow: hidden;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .volume-bar.visible { opacity: 1; }
+        .volume-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00c896, #00ff88);
+            border-radius: 2px;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        .tip {
+            margin-top: 30px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="title">🎓 English Tutor</div>
+        <div class="subtitle">Tap to start your English conversation</div>
+        
+        <div class="timer" id="timer"></div>
+        <button class="call-btn idle" id="callBtn" onclick="toggleCall()">🎙️</button>
+        <div class="status" id="status">Tap to start</div>
+        
+        <div class="volume-bar" id="volumeBar">
+            <div class="volume-fill" id="volumeFill"></div>
+        </div>
+        
+        <div class="tip">Speak in English • 영어로 말해보세요</div>
+    </div>
+
+    <script>
+        const VAPI_PUBLIC_KEY = '76c3402f-5efc-45ba-9be1-7d313e117f02';
+        const ASSISTANT_ID = 'af2b7287-5316-4c86-b85d-e29352bc0c85';
+        
+        let vapi = null;
+        let callActive = false;
+        let timerInterval = null;
+        let seconds = 0;
+
+        const btn = document.getElementById('callBtn');
+        const statusEl = document.getElementById('status');
+        const timerEl = document.getElementById('timer');
+        const volumeBar = document.getElementById('volumeBar');
+        const volumeFill = document.getElementById('volumeFill');
+
+        // Init Telegram WebApp if available
+        if (window.Telegram && window.Telegram.WebApp) {
+            Telegram.WebApp.ready();
+            Telegram.WebApp.expand();
+        }
+
+        function initVapi() {
+            if (vapi) return;
+            vapi = new window.Vapi(VAPI_PUBLIC_KEY);
+
+            vapi.on('call-start', () => {
+                callActive = true;
+                btn.className = 'call-btn active';
+                btn.textContent = '⏹️';
+                statusEl.textContent = 'Connected! Start speaking...';
+                volumeBar.classList.add('visible');
+                startTimer();
+            });
+
+            vapi.on('call-end', () => {
+                endCall();
+            });
+
+            vapi.on('speech-start', () => {
+                statusEl.textContent = '🗣️ Tutor is speaking...';
+            });
+
+            vapi.on('speech-end', () => {
+                statusEl.textContent = '🎤 Your turn! Speak...';
+            });
+
+            vapi.on('volume-level', (level) => {
+                volumeFill.style.width = (level * 100) + '%';
+            });
+
+            vapi.on('error', (e) => {
+                console.error('Vapi error:', e);
+                statusEl.textContent = '❌ Error - tap to retry';
+                endCall();
+            });
+        }
+
+        function toggleCall() {
+            if (!callActive) {
+                startCall();
+            } else {
+                stopCall();
+            }
+        }
+
+        async function startCall() {
+            initVapi();
+            btn.className = 'call-btn connecting';
+            btn.textContent = '⏳';
+            statusEl.textContent = 'Connecting...';
+            
+            try {
+                await vapi.start(ASSISTANT_ID);
+            } catch (e) {
+                console.error('Start error:', e);
+                statusEl.textContent = '❌ Failed to connect';
+                btn.className = 'call-btn idle';
+                btn.textContent = '🎙️';
+            }
+        }
+
+        function stopCall() {
+            if (vapi) {
+                vapi.stop();
+            }
+            endCall();
+        }
+
+        function endCall() {
+            callActive = false;
+            btn.className = 'call-btn idle';
+            btn.textContent = '🎙️';
+            volumeBar.classList.remove('visible');
+            volumeFill.style.width = '0%';
+            stopTimer();
+            if (seconds > 0) {
+                statusEl.textContent = `Session ended (${formatTime(seconds)})`;
+            } else {
+                statusEl.textContent = 'Tap to start';
+            }
+            seconds = 0;
+        }
+
+        function startTimer() {
+            seconds = 0;
+            timerEl.textContent = '00:00';
+            timerInterval = setInterval(() => {
+                seconds++;
+                timerEl.textContent = formatTime(seconds);
+            }, 1000);
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+
+        function formatTime(s) {
+            const m = Math.floor(s / 60).toString().padStart(2, '0');
+            const sec = (s % 60).toString().padStart(2, '0');
+            return `${m}:${sec}`;
+        }
+    </script>
+</body>
+</html>
