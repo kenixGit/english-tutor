@@ -188,6 +188,7 @@
                 if (vapiInstance) {
                     vapiInstance.on('call-start', () => {
                         console.log('Call started');
+                        isStarting = false;
                         callActive = true;
                         btn.className = 'call-btn active';
                         btn.textContent = '⏹️';
@@ -230,10 +231,17 @@
             };
         })(document, "script");
 
+        let isStarting = false;
+
         // Button click handler
         btn.addEventListener('click', function() {
             if (!vapiInstance) {
                 statusEl.textContent = '⚠️ SDK not loaded yet';
+                return;
+            }
+            if (isStarting) {
+                // Allow cancel during connection
+                cancelCall();
                 return;
             }
             if (!callActive) {
@@ -244,18 +252,46 @@
         });
 
         async function startCall() {
+            isStarting = true;
             btn.className = 'call-btn connecting';
             btn.textContent = '⏳';
-            statusEl.textContent = 'Connecting...';
+            statusEl.textContent = 'Connecting... (up to 30s)';
             
+            // Progress dots
+            let dots = 0;
+            const progressInterval = setInterval(() => {
+                dots = (dots + 1) % 4;
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                statusEl.textContent = `Connecting${'.'.repeat(dots)} (${elapsed}s)`;
+            }, 1000);
+            const startTime = Date.now();
+
             try {
                 await vapiInstance.start(ASSISTANT_ID);
+                // call-start event will handle UI update
             } catch (e) {
                 console.error('Start error:', e);
                 statusEl.textContent = '❌ Failed to connect - tap to retry';
                 btn.className = 'call-btn idle';
                 btn.textContent = '🎙️';
+                isStarting = false;
+            } finally {
+                clearInterval(progressInterval);
             }
+        }
+
+        function cancelCall() {
+            if (vapiInstance) {
+                vapiInstance.stop();
+            }
+            isStarting = false;
+            callActive = false;
+            btn.className = 'call-btn idle';
+            btn.textContent = '🎙️';
+            statusEl.textContent = 'Cancelled - tap to retry';
+            volumeBar.classList.remove('visible');
+            stopTimer();
+            seconds = 0;
         }
 
         function stopCall() {
