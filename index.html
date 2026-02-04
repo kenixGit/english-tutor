@@ -195,18 +195,12 @@
         const passInput = document.getElementById('passInput');
         const lockError = document.getElementById('lockError');
 
-        // Check if already authenticated this session
-        if (sessionStorage.getItem('tutor_auth') === 'ok') {
-            lockScreen.classList.add('hidden');
-            appScreen.classList.add('visible');
-            loadVapiSDK();
-        }
+        // No auto-skip: always require password on page load
 
         passInput.addEventListener('keydown', async function(e) {
             if (e.key === 'Enter') {
                 const hash = await sha256(passInput.value);
                 if (hash === PASS_HASH) {
-                    sessionStorage.setItem('tutor_auth', 'ok');
                     lockScreen.classList.add('hidden');
                     appScreen.classList.add('visible');
                     loadVapiSDK();
