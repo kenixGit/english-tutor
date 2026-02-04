@@ -7,6 +7,45 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* Password screen */
+        .lock-screen {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #1a1a2e;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .lock-screen.hidden { display: none; }
+        .lock-icon { font-size: 48px; margin-bottom: 16px; }
+        .lock-title { font-size: 18px; margin-bottom: 24px; color: #aaa; }
+        .lock-input {
+            width: 240px;
+            padding: 14px 18px;
+            border-radius: 12px;
+            border: 2px solid #333;
+            background: #16213e;
+            color: #fff;
+            font-size: 18px;
+            text-align: center;
+            outline: none;
+            letter-spacing: 4px;
+        }
+        .lock-input:focus { border-color: #00c896; }
+        .lock-input.shake {
+            animation: shake 0.4s;
+            border-color: #ff4757;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .lock-error { color: #ff4757; font-size: 14px; margin-top: 12px; min-height: 20px; }
+        .app-screen { display: none; }
+        .app-screen.visible { display: flex; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: #1a1a2e;
@@ -121,6 +160,16 @@
     </style>
 </head>
 <body>
+    <!-- Password Screen -->
+    <div class="lock-screen" id="lockScreen">
+        <div class="lock-icon">🔒</div>
+        <div class="lock-title">Enter password to continue</div>
+        <input type="password" class="lock-input" id="passInput" placeholder="••••" maxlength="10" autofocus>
+        <div class="lock-error" id="lockError"></div>
+    </div>
+
+    <!-- App Screen (hidden until password correct) -->
+    <div class="app-screen" id="appScreen">
     <div class="container">
         <div class="title">🎓 English Tutor</div>
         <div class="subtitle">Tap to start your English conversation</div>
@@ -136,7 +185,46 @@
         <div class="tip">Speak in English • 영어로 말해보세요</div>
     </div>
 
+    </div><!-- end app-screen -->
+
     <script>
+        // Password check (SHA-256 hash of password)
+        const PASS_HASH = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'; // default: 1234
+        const lockScreen = document.getElementById('lockScreen');
+        const appScreen = document.getElementById('appScreen');
+        const passInput = document.getElementById('passInput');
+        const lockError = document.getElementById('lockError');
+
+        // Check if already authenticated this session
+        if (sessionStorage.getItem('tutor_auth') === 'ok') {
+            lockScreen.classList.add('hidden');
+            appScreen.classList.add('visible');
+            loadVapiSDK();
+        }
+
+        passInput.addEventListener('keydown', async function(e) {
+            if (e.key === 'Enter') {
+                const hash = await sha256(passInput.value);
+                if (hash === PASS_HASH) {
+                    sessionStorage.setItem('tutor_auth', 'ok');
+                    lockScreen.classList.add('hidden');
+                    appScreen.classList.add('visible');
+                    loadVapiSDK();
+                } else {
+                    passInput.classList.add('shake');
+                    lockError.textContent = 'Wrong password';
+                    passInput.value = '';
+                    setTimeout(() => passInput.classList.remove('shake'), 400);
+                }
+            }
+        });
+
+        async function sha256(text) {
+            const data = new TextEncoder().encode(text);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
         const ASSISTANT_ID = 'af2b7287-5316-4c86-b85d-e29352bc0c85';
         const API_KEY = '76c3402f-5efc-45ba-9be1-7d313e117f02';
         
@@ -157,6 +245,7 @@
             Telegram.WebApp.expand();
         }
 
+        function loadVapiSDK() {
         // Load Vapi SDK via official HTML script tag method
         (function(d, t) {
             var g = document.createElement(t),
@@ -230,6 +319,7 @@
                 btn.disabled = false;
             };
         })(document, "script");
+        } // end loadVapiSDK
 
         let isStarting = false;
 
