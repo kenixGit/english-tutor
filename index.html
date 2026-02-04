@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>English Tutor</title>
-    <script src="https://cdn.jsdelivr.net/npm/@vapi-ai/web@latest/dist/vapi.umd.js"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -55,6 +54,10 @@
         .call-btn.idle:hover {
             transform: scale(1.05);
             box-shadow: 0 4px 40px rgba(0, 200, 150, 0.5);
+        }
+        .call-btn.loading {
+            background: linear-gradient(135deg, #666, #444);
+            cursor: wait;
         }
         .call-btn.connecting {
             background: linear-gradient(135deg, #f0ad4e, #ec971f);
@@ -109,6 +112,12 @@
             font-size: 12px;
             color: #666;
         }
+        /* Hide the default Vapi widget button */
+        #vapi-support-btn,
+        .vapi-btn,
+        [id^="vapi"] {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -117,8 +126,8 @@
         <div class="subtitle">Tap to start your English conversation</div>
         
         <div class="timer" id="timer"></div>
-        <button class="call-btn idle" id="callBtn" onclick="toggleCall()">🎙️</button>
-        <div class="status" id="status">Tap to start</div>
+        <button class="call-btn loading" id="callBtn" disabled>⏳</button>
+        <div class="status" id="status">Loading SDK...</div>
         
         <div class="volume-bar" id="volumeBar">
             <div class="volume-fill" id="volumeFill"></div>
@@ -128,10 +137,10 @@
     </div>
 
     <script>
-        const VAPI_PUBLIC_KEY = '76c3402f-5efc-45ba-9be1-7d313e117f02';
         const ASSISTANT_ID = 'af2b7287-5316-4c86-b85d-e29352bc0c85';
+        const API_KEY = '76c3402f-5efc-45ba-9be1-7d313e117f02';
         
-        let vapi = null;
+        let vapiInstance = null;
         let callActive = false;
         let timerInterval = null;
         let seconds = 0;
@@ -148,69 +157,110 @@
             Telegram.WebApp.expand();
         }
 
-        function initVapi() {
-            if (vapi) return;
-            vapi = new window.Vapi(VAPI_PUBLIC_KEY);
+        // Load Vapi SDK via official HTML script tag method
+        (function(d, t) {
+            var g = document.createElement(t),
+                s = d.getElementsByTagName(t)[0];
+            g.src = "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
+            g.defer = true;
+            g.async = true;
+            s.parentNode.insertBefore(g, s);
 
-            vapi.on('call-start', () => {
-                callActive = true;
-                btn.className = 'call-btn active';
-                btn.textContent = '⏹️';
-                statusEl.textContent = 'Connected! Start speaking...';
-                volumeBar.classList.add('visible');
-                startTimer();
-            });
+            g.onload = function() {
+                console.log('Vapi SDK loaded successfully');
+                // Create the instance (this also creates a hidden widget)
+                vapiInstance = window.vapiSDK.run({
+                    apiKey: API_KEY,
+                    assistant: ASSISTANT_ID,
+                    config: {
+                        hide: true, // Hide default button
+                        position: 'bottom-right'
+                    }
+                });
 
-            vapi.on('call-end', () => {
-                endCall();
-            });
+                // SDK loaded, enable button
+                btn.disabled = false;
+                btn.className = 'call-btn idle';
+                btn.textContent = '🎙️';
+                statusEl.textContent = 'Tap to start';
 
-            vapi.on('speech-start', () => {
-                statusEl.textContent = '🗣️ Tutor is speaking...';
-            });
+                // Listen for events on the vapiInstance
+                if (vapiInstance) {
+                    vapiInstance.on('call-start', () => {
+                        console.log('Call started');
+                        callActive = true;
+                        btn.className = 'call-btn active';
+                        btn.textContent = '⏹️';
+                        statusEl.textContent = 'Connected! Start speaking...';
+                        volumeBar.classList.add('visible');
+                        startTimer();
+                    });
 
-            vapi.on('speech-end', () => {
-                statusEl.textContent = '🎤 Your turn! Speak...';
-            });
+                    vapiInstance.on('call-end', () => {
+                        console.log('Call ended');
+                        endCall();
+                    });
 
-            vapi.on('volume-level', (level) => {
-                volumeFill.style.width = (level * 100) + '%';
-            });
+                    vapiInstance.on('speech-start', () => {
+                        statusEl.textContent = '🗣️ Tutor is speaking...';
+                    });
 
-            vapi.on('error', (e) => {
-                console.error('Vapi error:', e);
-                statusEl.textContent = '❌ Error - tap to retry';
-                endCall();
-            });
-        }
+                    vapiInstance.on('speech-end', () => {
+                        statusEl.textContent = '🎤 Your turn! Speak...';
+                    });
 
-        function toggleCall() {
+                    vapiInstance.on('volume-level', (level) => {
+                        volumeFill.style.width = (level * 100) + '%';
+                    });
+
+                    vapiInstance.on('error', (e) => {
+                        console.error('Vapi error:', e);
+                        statusEl.textContent = '❌ Error - tap to retry';
+                        endCall();
+                    });
+                }
+            };
+
+            g.onerror = function() {
+                console.error('Failed to load Vapi SDK');
+                statusEl.textContent = '❌ Failed to load SDK';
+                btn.className = 'call-btn idle';
+                btn.textContent = '🎙️';
+                btn.disabled = false;
+            };
+        })(document, "script");
+
+        // Button click handler
+        btn.addEventListener('click', function() {
+            if (!vapiInstance) {
+                statusEl.textContent = '⚠️ SDK not loaded yet';
+                return;
+            }
             if (!callActive) {
                 startCall();
             } else {
                 stopCall();
             }
-        }
+        });
 
         async function startCall() {
-            initVapi();
             btn.className = 'call-btn connecting';
             btn.textContent = '⏳';
             statusEl.textContent = 'Connecting...';
             
             try {
-                await vapi.start(ASSISTANT_ID);
+                await vapiInstance.start(ASSISTANT_ID);
             } catch (e) {
                 console.error('Start error:', e);
-                statusEl.textContent = '❌ Failed to connect';
+                statusEl.textContent = '❌ Failed to connect - tap to retry';
                 btn.className = 'call-btn idle';
                 btn.textContent = '🎙️';
             }
         }
 
         function stopCall() {
-            if (vapi) {
-                vapi.stop();
+            if (vapiInstance) {
+                vapiInstance.stop();
             }
             endCall();
         }
