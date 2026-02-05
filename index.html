@@ -234,8 +234,6 @@ let playContext = null;
 let gainNode = null;
 let timerInterval = null;
 let callStart = 0;
-let audioQueue = [];
-let isPlaying = false;
 let isTutorSpeaking = false;
 
 const callBtn = document.getElementById('callBtn');
@@ -366,51 +364,73 @@ function stopMic() {
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
 }
 
-async function playAudioQueue() {
-  if (isPlaying || audioQueue.length === 0) return;
-  isPlaying = true;
-  setTutorSpeaking(true);
+// Seamless audio playback using scheduled timing
+let nextPlayTime = 0;
+let playAnalyser = null;
+let volInterval = null;
 
+function initPlayContext() {
   if (!playContext) {
     playContext = new AudioContext({ sampleRate: 24000 });
     gainNode = playContext.createGain();
     gainNode.gain.value = document.getElementById('volumeSlider').value / 100;
-    gainNode.connect(playContext.destination);
-  }
-  if (playContext.state === 'suspended') await playContext.resume();
+    playAnalyser = playContext.createAnalyser();
+    playAnalyser.fftSize = 256;
+    gainNode.connect(playAnalyser);
+    playAnalyser.connect(playContext.destination);
 
-  while (audioQueue.length > 0) {
-    const pcmBuf = audioQueue.shift();
-    const int16 = new Int16Array(pcmBuf);
-    const float32 = new Float32Array(int16.length);
-    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
-
-    const audioBuffer = playContext.createBuffer(1, float32.length, 24000);
-    audioBuffer.getChannelData(0).set(float32);
-    const source = playContext.createBufferSource();
-    source.buffer = audioBuffer;
-
-    const analyser = playContext.createAnalyser();
-    analyser.fftSize = 256;
-    source.connect(analyser);
-    analyser.connect(gainNode);
-
-    const dataArr = new Uint8Array(analyser.frequencyBinCount);
-    const volInterval = setInterval(() => {
-      analyser.getByteFrequencyData(dataArr);
+    // Volume bar updater
+    const dataArr = new Uint8Array(playAnalyser.frequencyBinCount);
+    volInterval = setInterval(() => {
+      if (!isTutorSpeaking) return;
+      playAnalyser.getByteFrequencyData(dataArr);
       let sum = 0;
       for (let i = 0; i < dataArr.length; i++) sum += dataArr[i];
       const avg = sum / dataArr.length / 255;
       volumeBar.style.width = Math.min(100, avg * 300) + '%';
     }, 50);
-
-    await new Promise(resolve => {
-      source.onended = () => { clearInterval(volInterval); resolve(); };
-      source.start();
-    });
   }
+}
 
-  isPlaying = false;
+function scheduleAudioChunk(pcmBuf) {
+  initPlayContext();
+  if (playContext.state === 'suspended') playContext.resume();
+
+  const int16 = new Int16Array(pcmBuf);
+  const float32 = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
+
+  const audioBuffer = playContext.createBuffer(1, float32.length, 24000);
+  audioBuffer.getChannelData(0).set(float32);
+  const source = playContext.createBufferSource();
+  source.buffer = audioBuffer;
+  source.connect(gainNode);
+
+  const now = playContext.currentTime;
+  const startTime = Math.max(now, nextPlayTime);
+  source.start(startTime);
+  nextPlayTime = startTime + audioBuffer.duration;
+
+  // Track when playback finishes
+  source.onended = () => {
+    if (playContext && playContext.currentTime >= nextPlayTime - 0.05) {
+      setTutorSpeaking(false);
+      volumeBar.style.width = '0%';
+    }
+  };
+
+  if (!isTutorSpeaking) setTutorSpeaking(true);
+}
+
+function stopPlayback() {
+  nextPlayTime = 0;
+  if (playContext) {
+    playContext.close();
+    playContext = null;
+    gainNode = null;
+    playAnalyser = null;
+  }
+  if (volInterval) { clearInterval(volInterval); volInterval = null; }
   setTutorSpeaking(false);
   volumeBar.style.width = '0%';
 }
@@ -446,8 +466,7 @@ async function connectSession() {
               for (const part of sc.modelTurn.parts) {
                 if (part.inlineData && part.inlineData.data) {
                   const pcm = base64ToArrayBuffer(part.inlineData.data);
-                  audioQueue.push(pcm);
-                  playAudioQueue();
+                  scheduleAudioChunk(pcm);
                 }
               }
             }
@@ -497,9 +516,8 @@ function endCall() {
     session = null;
   }
   stopMic();
+  stopPlayback();
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-  audioQueue = [];
-  isPlaying = false;
   setState('idle');
   callTimer.textContent = '00:00';
 }
@@ -515,7 +533,7 @@ function toggleCall() {
 // Volume slider
 document.getElementById('volumeSlider').addEventListener('input', (e) => {
   const vol = e.target.value / 100;
-  if (gainNode) gainNode.gain.value = vol;
+  if (gainNode) gainNode.gain.setValueAtTime(vol, playContext.currentTime);
 });
 
 // Expose to global for onclick handler
