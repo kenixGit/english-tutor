@@ -374,10 +374,17 @@ async function playAudioQueue() {
 
 function connectWS() {
   setState('connecting');
-  ws = new WebSocket(WS_URL);
+  try {
+    ws = new WebSocket(WS_URL);
+  } catch(e) {
+    statusText.textContent = '❌ WebSocket 생성 실패: ' + e.message;
+    setState('idle');
+    return;
+  }
 
   ws.onopen = () => {
-    // Send setup message
+    console.log('WS connected, sending setup...');
+    statusText.textContent = '설정 중... / Setting up...';
     ws.send(JSON.stringify({
       setup: {
         model: MODEL,
@@ -398,16 +405,25 @@ function connectWS() {
     }));
   };
 
-  ws.onmessage = (event) => {
+  ws.onmessage = async (event) => {
     try {
       const msg = JSON.parse(event.data);
+      console.log('WS msg keys:', Object.keys(msg));
 
       // Setup complete
-      if (msg.setupComplete) {
-        setState('active');
-        callStart = Date.now();
-        timerInterval = setInterval(updateTimer, 1000);
-        startMic();
+      if (msg.setupComplete !== undefined) {
+        console.log('Setup complete, starting mic...');
+        statusText.textContent = '마이크 연결 중... / Starting mic...';
+        try {
+          await startMic();
+          setState('active');
+          callStart = Date.now();
+          timerInterval = setInterval(updateTimer, 1000);
+        } catch (micErr) {
+          console.error('Mic error:', micErr);
+          statusText.textContent = '❌ 마이크 오류: ' + micErr.message;
+          endCall();
+        }
         return;
       }
 
@@ -434,11 +450,16 @@ function connectWS() {
 
   ws.onerror = (e) => {
     console.error('WS error', e);
-    endCall();
+    statusText.textContent = '❌ 연결 오류 / Connection error';
+    setTimeout(() => endCall(), 2000);
   };
 
-  ws.onclose = () => {
-    if (state === 'active' || state === 'connecting') endCall();
+  ws.onclose = (e) => {
+    console.log('WS closed:', e.code, e.reason);
+    if (state === 'active' || state === 'connecting') {
+      statusText.textContent = '연결 종료됨 / Disconnected';
+      setTimeout(() => endCall(), 1500);
+    }
   };
 }
 
