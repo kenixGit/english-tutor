@@ -6,9 +6,6 @@
 <title>English Tutor | 영어 튜터</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
-  /* Hide Vapi default widget */
-  #vapi-support-btn, .vapi-btn, [id^="vapi"] { display: none !important; }
-
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -61,6 +58,7 @@
   .tutor-label { font-size: 13px; color: #888; }
   #callTimer { font-size: 40px; font-weight: 200; color: #fff; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
   #statusText { font-size: 15px; color: #00c896; min-height: 22px; transition: all 0.3s; }
+  #errorText { font-size: 13px; color: #ff4757; min-height: 18px; max-width: 90%; text-align: center; word-break: break-word; }
 
   .volume-bar-container {
     width: 200px; height: 6px; background: #2a2a4a; border-radius: 3px; overflow: hidden; margin: 4px 0;
@@ -145,6 +143,7 @@
   <div class="tutor-label">AI 영어 회화 튜터</div>
   <div id="callTimer">00:00</div>
   <div id="statusText">통화 시작을 탭하세요 / Tap to start</div>
+  <div id="errorText"></div>
   <div class="volume-bar-container"><div id="volumeBar"></div></div>
   <div class="speaking-indicator" id="speakingIndicator">
     <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
@@ -154,7 +153,9 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+import { GoogleGenAI } from 'https://esm.sh/@google/genai@1.40.0/web';
+
 // === PIN Lock ===
 const PIN_HASH = 'ed7841674a6a92708eed1416db6206916811b10d3375a571ce2eb7139457e98f';
 let pinValue = '';
@@ -191,12 +192,15 @@ function pinDelete() {
   if (pinValue.length > 0) { pinValue = pinValue.slice(0, -1); updateDots(); }
 }
 
-// === Gemini Live API ===
-const API_KEY = 'AIzaSyBkCiTO3ZAmqU2nyE9lRVgOvnDcKl8MfoA';
-const WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${API_KEY}`;
-const MODEL = 'models/gemini-2.5-flash-native-audio-latest';
+// Expose to global for onclick handlers
+window.pinInput = pinInput;
+window.pinDelete = pinDelete;
 
-let ws = null;
+// === Gemini Live API via Google GenAI SDK ===
+const API_KEY = 'AIzaSyBkCiTO3ZAmqU2nyE9lRVgOvnDcKl8MfoA';
+const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+let session = null;
 let state = 'idle'; // idle | connecting | active
 let micStream = null;
 let micContext = null;
@@ -210,9 +214,19 @@ let isTutorSpeaking = false;
 
 const callBtn = document.getElementById('callBtn');
 const statusText = document.getElementById('statusText');
+const errorText = document.getElementById('errorText');
 const callTimer = document.getElementById('callTimer');
 const volumeBar = document.getElementById('volumeBar');
 const speakingInd = document.getElementById('speakingIndicator');
+
+function showError(msg) {
+  errorText.textContent = msg;
+  console.error(msg);
+}
+
+function clearError() {
+  errorText.textContent = '';
+}
 
 function setState(s) {
   state = s;
@@ -225,6 +239,7 @@ function setState(s) {
   } else if (s === 'connecting') {
     callBtn.textContent = '⏳';
     statusText.textContent = '연결 중... / Connecting...';
+    clearError();
   } else if (s === 'active') {
     callBtn.textContent = '⏹️';
     setTutorSpeaking(false);
@@ -253,7 +268,6 @@ class CaptureProcessor extends AudioWorkletProcessor {
     super();
     this._buf = [];
     this._count = 0;
-    // ~250ms at 16kHz = 4000 samples
     this._threshold = 4000;
   }
   process(inputs) {
@@ -261,7 +275,6 @@ class CaptureProcessor extends AudioWorkletProcessor {
     if (!input || !input[0]) return true;
     const ch = input[0];
     for (let i = 0; i < ch.length; i++) {
-      // float32 -> int16
       let s = Math.max(-1, Math.min(1, ch[i]));
       this._buf.push(s < 0 ? s * 0x8000 : s * 0x7FFF);
     }
@@ -302,13 +315,13 @@ async function startMic() {
   const source = micContext.createMediaStreamSource(micStream);
   micWorklet = new AudioWorkletNode(micContext, 'capture-processor');
   micWorklet.port.onmessage = (e) => {
-    if (ws && ws.readyState === WebSocket.OPEN && state === 'active') {
+    if (session && state === 'active') {
       const b64 = arrayBufferToBase64(e.data.pcm);
-      ws.send(JSON.stringify({
-        realtime_input: {
-          media_chunks: [{ data: b64, mime_type: 'audio/pcm;rate=16000' }]
-        }
-      }));
+      try {
+        session.sendRealtimeInput({ media: { data: b64, mimeType: 'audio/pcm;rate=16000' } });
+      } catch (err) {
+        console.error('sendRealtimeInput error:', err);
+      }
       // Update volume bar from PCM
       const view = new Int16Array(e.data.pcm);
       let sum = 0;
@@ -318,7 +331,7 @@ async function startMic() {
     }
   };
   source.connect(micWorklet);
-  micWorklet.connect(micContext.destination); // needed to keep worklet alive
+  micWorklet.connect(micContext.destination);
 }
 
 function stopMic() {
@@ -346,7 +359,6 @@ async function playAudioQueue() {
     const source = playContext.createBufferSource();
     source.buffer = audioBuffer;
 
-    // Analyser for volume
     const analyser = playContext.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
@@ -372,99 +384,87 @@ async function playAudioQueue() {
   volumeBar.style.width = '0%';
 }
 
-function connectWS() {
+async function connectSession() {
   setState('connecting');
-  try {
-    ws = new WebSocket(WS_URL);
-  } catch(e) {
-    statusText.textContent = '❌ WebSocket 생성 실패: ' + e.message;
-    setState('idle');
-    return;
-  }
+  clearError();
 
-  ws.onopen = () => {
-    console.log('WS connected, sending setup...');
-    statusText.textContent = '설정 중... / Setting up...';
-    ws.send(JSON.stringify({
-      setup: {
-        model: MODEL,
-        generation_config: {
-          response_modalities: ['AUDIO'],
-          speech_config: {
-            voice_config: {
-              prebuilt_voice_config: { voice_name: 'Kore' }
+  try {
+    session = await ai.live.connect({
+      model: 'gemini-2.5-flash-native-audio-latest',
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: 'Kore' }
+          }
+        }
+      },
+      systemInstruction: 'You are a friendly English conversation tutor. Help the user practice English conversation naturally. Speak in simple, clear English. If the user speaks Korean, gently guide them to try in English. Give encouragement and corrections when needed. Keep conversations casual and fun.',
+      callbacks: {
+        onmessage: (msg) => {
+          // Setup complete
+          if (msg.setupComplete !== undefined) {
+            console.log('Setup complete');
+            return;
+          }
+
+          // Audio data from server
+          if (msg.serverContent) {
+            const sc = msg.serverContent;
+            if (sc.modelTurn && sc.modelTurn.parts) {
+              for (const part of sc.modelTurn.parts) {
+                if (part.inlineData && part.inlineData.data) {
+                  const pcm = base64ToArrayBuffer(part.inlineData.data);
+                  audioQueue.push(pcm);
+                  playAudioQueue();
+                }
+              }
+            }
+            if (sc.turnComplete) {
+              // Turn done — audio queue will finish playing
             }
           }
         },
-        system_instruction: {
-          parts: [{
-            text: 'You are a friendly English conversation tutor. Help the user practice English conversation naturally. Speak in simple, clear English. If the user speaks Korean, gently guide them to try in English. Give encouragement and corrections when needed. Keep conversations casual and fun.'
-          }]
-        }
-      }
-    }));
-  };
-
-  ws.onmessage = async (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      console.log('WS msg keys:', Object.keys(msg));
-
-      // Setup complete
-      if (msg.setupComplete !== undefined) {
-        console.log('Setup complete, starting mic...');
-        statusText.textContent = '마이크 연결 중... / Starting mic...';
-        try {
-          await startMic();
-          setState('active');
-          callStart = Date.now();
-          timerInterval = setInterval(updateTimer, 1000);
-        } catch (micErr) {
-          console.error('Mic error:', micErr);
-          statusText.textContent = '❌ 마이크 오류: ' + micErr.message;
-          endCall();
-        }
-        return;
-      }
-
-      // Audio data from server
-      if (msg.serverContent) {
-        const sc = msg.serverContent;
-        if (sc.modelTurn && sc.modelTurn.parts) {
-          for (const part of sc.modelTurn.parts) {
-            if (part.inlineData && part.inlineData.data) {
-              const pcm = base64ToArrayBuffer(part.inlineData.data);
-              audioQueue.push(pcm);
-              playAudioQueue();
-            }
+        onclose: (e) => {
+          console.log('Session closed', e);
+          if (state === 'active' || state === 'connecting') {
+            statusText.textContent = '연결 종료됨 / Disconnected';
+            setTimeout(() => endCall(), 1500);
           }
-        }
-        if (sc.turnComplete) {
-          // Turn done — audio queue will finish playing
+        },
+        onerror: (e) => {
+          console.error('Session error', e);
+          showError('연결 오류 / Connection error: ' + (e.message || e));
+          setTimeout(() => endCall(), 2000);
         }
       }
-    } catch (e) {
-      console.error('WS message parse error:', e);
-    }
-  };
+    });
 
-  ws.onerror = (e) => {
-    console.error('WS error', e);
-    statusText.textContent = '❌ 연결 오류 / Connection error';
-    setTimeout(() => endCall(), 2000);
-  };
-
-  ws.onclose = (e) => {
-    console.log('WS closed:', e.code, e.reason);
-    if (state === 'active' || state === 'connecting') {
-      statusText.textContent = '연결 종료됨 / Disconnected';
-      setTimeout(() => endCall(), 1500);
+    // Session connected, start mic
+    statusText.textContent = '마이크 연결 중... / Starting mic...';
+    try {
+      await startMic();
+      setState('active');
+      callStart = Date.now();
+      timerInterval = setInterval(updateTimer, 1000);
+    } catch (micErr) {
+      console.error('Mic error:', micErr);
+      showError('마이크 오류 / Mic error: ' + micErr.message);
+      endCall();
     }
-  };
+
+  } catch (err) {
+    console.error('Connect error:', err);
+    showError('연결 실패 / Connection failed: ' + (err.message || err));
+    setState('idle');
+  }
 }
 
 function endCall() {
-  if (ws) { ws.close(); ws = null; }
+  if (session) {
+    try { session.close(); } catch (e) { /* ignore */ }
+    session = null;
+  }
   stopMic();
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   audioQueue = [];
@@ -475,11 +475,14 @@ function endCall() {
 
 function toggleCall() {
   if (state === 'idle') {
-    connectWS();
+    connectSession();
   } else {
     endCall();
   }
 }
+
+// Expose to global for onclick handler
+window.toggleCall = toggleCall;
 
 // Telegram WebApp expand
 try { if (window.Telegram && Telegram.WebApp) Telegram.WebApp.expand(); } catch(e) {}
