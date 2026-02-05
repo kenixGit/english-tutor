@@ -1,426 +1,467 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>English Tutor</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        /* Password screen */
-        .lock-screen {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            background: #1a1a2e;
-            color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-        .lock-screen.hidden { display: none; }
-        .lock-icon { font-size: 48px; margin-bottom: 16px; }
-        .lock-title { font-size: 18px; margin-bottom: 24px; color: #aaa; }
-        .lock-input {
-            width: 240px;
-            padding: 14px 18px;
-            border-radius: 12px;
-            border: 2px solid #333;
-            background: #16213e;
-            color: #fff;
-            font-size: 18px;
-            text-align: center;
-            outline: none;
-            letter-spacing: 4px;
-        }
-        .lock-input:focus { border-color: #00c896; }
-        .lock-input.shake {
-            animation: shake 0.4s;
-            border-color: #ff4757;
-        }
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-8px); }
-            75% { transform: translateX(8px); }
-        }
-        .lock-error { color: #ff4757; font-size: 14px; margin-top: 12px; min-height: 20px; }
-        .app-screen { display: none; }
-        .app-screen.visible { display: flex; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1a1a2e;
-            color: #fff;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-        }
-        .container {
-            text-align: center;
-            padding: 20px;
-            width: 100%;
-            max-width: 400px;
-        }
-        .title {
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-        .subtitle {
-            font-size: 14px;
-            color: #aaa;
-            margin-bottom: 40px;
-        }
-        .call-btn {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            border: none;
-            cursor: pointer;
-            font-size: 48px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 20px;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 30px rgba(0, 200, 150, 0.3);
-        }
-        .call-btn.idle {
-            background: linear-gradient(135deg, #00c896, #00a67e);
-        }
-        .call-btn.idle:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 40px rgba(0, 200, 150, 0.5);
-        }
-        .call-btn.loading {
-            background: linear-gradient(135deg, #666, #444);
-            cursor: wait;
-        }
-        .call-btn.connecting {
-            background: linear-gradient(135deg, #f0ad4e, #ec971f);
-            animation: pulse 1.5s infinite;
-        }
-        .call-btn.active {
-            background: linear-gradient(135deg, #ff4757, #c0392b);
-            animation: glow 2s infinite;
-        }
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.08); }
-        }
-        @keyframes glow {
-            0%, 100% { box-shadow: 0 0 20px rgba(255, 71, 87, 0.4); }
-            50% { box-shadow: 0 0 40px rgba(255, 71, 87, 0.7); }
-        }
-        .status {
-            font-size: 16px;
-            color: #ccc;
-            margin-bottom: 10px;
-            min-height: 24px;
-        }
-        .timer {
-            font-size: 32px;
-            font-weight: 300;
-            color: #00c896;
-            margin-bottom: 20px;
-            min-height: 40px;
-            font-variant-numeric: tabular-nums;
-        }
-        .volume-bar {
-            width: 200px;
-            height: 4px;
-            background: #333;
-            border-radius: 2px;
-            margin: 0 auto;
-            overflow: hidden;
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .volume-bar.visible { opacity: 1; }
-        .volume-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #00c896, #00ff88);
-            border-radius: 2px;
-            width: 0%;
-            transition: width 0.1s;
-        }
-        .tip {
-            margin-top: 30px;
-            font-size: 12px;
-            color: #666;
-        }
-        /* Hide the default Vapi widget button */
-        #vapi-support-btn,
-        .vapi-btn,
-        [id^="vapi"] {
-            display: none !important;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>English Tutor | 영어 튜터</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  /* Hide Vapi default widget */
+  #vapi-support-btn, .vapi-btn, [id^="vapi"] { display: none !important; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    height: 100vh; height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .screen { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 20px; }
+  .screen.active { display: flex; }
+
+  /* Lock Screen */
+  #lockScreen { gap: 24px; }
+  .lock-icon { font-size: 64px; margin-bottom: 8px; }
+  .lock-title { font-size: 20px; font-weight: 600; color: #fff; }
+  .lock-subtitle { font-size: 13px; color: #888; margin-top: -12px; }
+  .pin-dots { display: flex; gap: 12px; margin: 8px 0; }
+  .pin-dot {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid #555; background: transparent;
+    transition: all 0.2s;
+  }
+  .pin-dot.filled { background: #00c896; border-color: #00c896; }
+  .pin-dot.error { border-color: #ff4757; background: #ff4757; }
+  .numpad { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+  .numpad button {
+    width: 72px; height: 72px; border-radius: 50%;
+    border: 1.5px solid #444; background: rgba(255,255,255,0.05);
+    color: #fff; font-size: 28px; font-weight: 300;
+    cursor: pointer; transition: all 0.15s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .numpad button:active { background: rgba(0,200,150,0.3); border-color: #00c896; transform: scale(0.93); }
+  .numpad button.fn { font-size: 14px; border: none; background: transparent; color: #888; }
+  .numpad button.fn:active { color: #fff; }
+
+  /* Call Screen */
+  #callScreen { gap: 16px; position: relative; }
+  .tutor-avatar {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: linear-gradient(135deg, #00c896, #00a67e);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 56px; margin-bottom: 4px;
+    box-shadow: 0 0 40px rgba(0,200,150,0.15);
+  }
+  .tutor-name { font-size: 22px; font-weight: 600; color: #fff; }
+  .tutor-label { font-size: 13px; color: #888; }
+  #callTimer { font-size: 40px; font-weight: 200; color: #fff; letter-spacing: 2px; font-variant-numeric: tabular-nums; }
+  #statusText { font-size: 15px; color: #00c896; min-height: 22px; transition: all 0.3s; }
+
+  .volume-bar-container {
+    width: 200px; height: 6px; background: #2a2a4a; border-radius: 3px; overflow: hidden; margin: 4px 0;
+  }
+  #volumeBar { height: 100%; width: 0%; background: linear-gradient(90deg, #00c896, #00ffaa); border-radius: 3px; transition: width 0.1s; }
+
+  .call-controls { display: flex; gap: 32px; margin-top: 20px; align-items: center; }
+  #callBtn {
+    width: 80px; height: 80px; border-radius: 50%; border: none;
+    font-size: 36px; cursor: pointer; transition: all 0.3s;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  #callBtn.idle { background: #00c896; color: #fff; box-shadow: 0 0 20px rgba(0,200,150,0.4); }
+  #callBtn.idle:active { transform: scale(0.92); }
+  #callBtn.connecting {
+    background: #f39c12; color: #fff;
+    animation: pulse-orange 1.2s infinite;
+  }
+  #callBtn.active {
+    background: #ff4757; color: #fff;
+    box-shadow: 0 0 25px rgba(255,71,87,0.5);
+  }
+  #callBtn.active:active { transform: scale(0.92); }
+
+  @keyframes pulse-orange {
+    0%, 100% { box-shadow: 0 0 10px rgba(243,156,18,0.4); }
+    50% { box-shadow: 0 0 30px rgba(243,156,18,0.7); }
+  }
+
+  .speaking-indicator {
+    display: none; gap: 3px; align-items: center; height: 30px;
+  }
+  .speaking-indicator.visible { display: flex; }
+  .speaking-indicator .bar {
+    width: 4px; border-radius: 2px; background: #00c896;
+    animation: speak-bar 0.8s ease-in-out infinite;
+  }
+  .speaking-indicator .bar:nth-child(1) { height: 10px; animation-delay: 0s; }
+  .speaking-indicator .bar:nth-child(2) { height: 20px; animation-delay: 0.15s; }
+  .speaking-indicator .bar:nth-child(3) { height: 14px; animation-delay: 0.3s; }
+  .speaking-indicator .bar:nth-child(4) { height: 24px; animation-delay: 0.1s; }
+  .speaking-indicator .bar:nth-child(5) { height: 12px; animation-delay: 0.25s; }
+
+  @keyframes speak-bar {
+    0%, 100% { transform: scaleY(0.4); }
+    50% { transform: scaleY(1); }
+  }
+</style>
 </head>
 <body>
-    <!-- Password Screen -->
-    <div class="lock-screen" id="lockScreen">
-        <div class="lock-icon">🔒</div>
-        <div class="lock-title">Enter password to continue</div>
-        <input type="password" class="lock-input" id="passInput" placeholder="••••" maxlength="10" autofocus>
-        <div class="lock-error" id="lockError"></div>
-    </div>
 
-    <!-- App Screen (hidden until password correct) -->
-    <div class="app-screen" id="appScreen">
-    <div class="container">
-        <div class="title">🎓 English Tutor</div>
-        <div class="subtitle">Tap to start your English conversation</div>
-        
-        <div class="timer" id="timer"></div>
-        <button class="call-btn loading" id="callBtn" disabled>⏳</button>
-        <div class="status" id="status">Loading SDK...</div>
-        
-        <div class="volume-bar" id="volumeBar">
-            <div class="volume-fill" id="volumeFill"></div>
-        </div>
-        
-        <div class="tip">Speak in English • 영어로 말해보세요</div>
-    </div>
+<!-- Lock Screen -->
+<div id="lockScreen" class="screen active">
+  <div class="lock-icon">🔒</div>
+  <div class="lock-title">English Tutor</div>
+  <div class="lock-subtitle">비밀번호를 입력하세요</div>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+    <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+  </div>
+  <div class="numpad" id="numpad">
+    <button onclick="pinInput('1')">1</button>
+    <button onclick="pinInput('2')">2</button>
+    <button onclick="pinInput('3')">3</button>
+    <button onclick="pinInput('4')">4</button>
+    <button onclick="pinInput('5')">5</button>
+    <button onclick="pinInput('6')">6</button>
+    <button onclick="pinInput('7')">7</button>
+    <button onclick="pinInput('8')">8</button>
+    <button onclick="pinInput('9')">9</button>
+    <button class="fn"></button>
+    <button onclick="pinInput('0')">0</button>
+    <button class="fn" onclick="pinDelete()">⌫</button>
+  </div>
+</div>
 
-    </div><!-- end app-screen -->
+<!-- Call Screen -->
+<div id="callScreen" class="screen">
+  <div class="tutor-avatar">🎓</div>
+  <div class="tutor-name">English Tutor</div>
+  <div class="tutor-label">AI 영어 회화 튜터</div>
+  <div id="callTimer">00:00</div>
+  <div id="statusText">통화 시작을 탭하세요 / Tap to start</div>
+  <div class="volume-bar-container"><div id="volumeBar"></div></div>
+  <div class="speaking-indicator" id="speakingIndicator">
+    <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+  </div>
+  <div class="call-controls">
+    <button id="callBtn" class="idle" onclick="toggleCall()">🎙️</button>
+  </div>
+</div>
 
-    <script>
-        // Password check (SHA-256 hash of password)
-        const PASS_HASH = 'ed7841674a6a92708eed1416db6206916811b10d3375a571ce2eb7139457e98f';
-        const lockScreen = document.getElementById('lockScreen');
-        const appScreen = document.getElementById('appScreen');
-        const passInput = document.getElementById('passInput');
-        const lockError = document.getElementById('lockError');
+<script>
+// === PIN Lock ===
+const PIN_HASH = 'ed7841674a6a92708eed1416db6206916811b10d3375a571ce2eb7139457e98f';
+let pinValue = '';
 
-        // No auto-skip: always require password on page load
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
 
-        passInput.addEventListener('keydown', async function(e) {
-            if (e.key === 'Enter') {
-                const hash = await sha256(passInput.value);
-                if (hash === PASS_HASH) {
-                    lockScreen.classList.add('hidden');
-                    appScreen.classList.add('visible');
-                    loadVapiSDK();
-                } else {
-                    passInput.classList.add('shake');
-                    lockError.textContent = 'Wrong password';
-                    passInput.value = '';
-                    setTimeout(() => passInput.classList.remove('shake'), 400);
-                }
-            }
-        });
+function updateDots() {
+  document.querySelectorAll('.pin-dot').forEach((d, i) => {
+    d.classList.toggle('filled', i < pinValue.length);
+    d.classList.remove('error');
+  });
+}
 
-        async function sha256(text) {
-            const data = new TextEncoder().encode(text);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+async function pinInput(n) {
+  if (pinValue.length >= 6) return;
+  pinValue += n;
+  updateDots();
+  if (pinValue.length === 6) {
+    const hash = await sha256(pinValue);
+    if (hash === PIN_HASH) {
+      document.getElementById('lockScreen').classList.remove('active');
+      document.getElementById('callScreen').classList.add('active');
+    } else {
+      document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('error'));
+      setTimeout(() => { pinValue = ''; updateDots(); }, 600);
+    }
+  }
+}
+
+function pinDelete() {
+  if (pinValue.length > 0) { pinValue = pinValue.slice(0, -1); updateDots(); }
+}
+
+// === Gemini Live API ===
+const API_KEY = 'AIzaSyBkCiTO3ZAmqU2nyE9lRVgOvnDcKl8MfoA';
+const WS_URL = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${API_KEY}`;
+const MODEL = 'models/gemini-2.0-flash-live-001';
+
+let ws = null;
+let state = 'idle'; // idle | connecting | active
+let micStream = null;
+let micContext = null;
+let micWorklet = null;
+let playContext = null;
+let timerInterval = null;
+let callStart = 0;
+let audioQueue = [];
+let isPlaying = false;
+let isTutorSpeaking = false;
+
+const callBtn = document.getElementById('callBtn');
+const statusText = document.getElementById('statusText');
+const callTimer = document.getElementById('callTimer');
+const volumeBar = document.getElementById('volumeBar');
+const speakingInd = document.getElementById('speakingIndicator');
+
+function setState(s) {
+  state = s;
+  callBtn.className = s;
+  if (s === 'idle') {
+    callBtn.textContent = '🎙️';
+    statusText.textContent = '통화 시작을 탭하세요 / Tap to start';
+    speakingInd.classList.remove('visible');
+    volumeBar.style.width = '0%';
+  } else if (s === 'connecting') {
+    callBtn.textContent = '⏳';
+    statusText.textContent = '연결 중... / Connecting...';
+  } else if (s === 'active') {
+    callBtn.textContent = '⏹️';
+    setTutorSpeaking(false);
+  }
+}
+
+function setTutorSpeaking(speaking) {
+  isTutorSpeaking = speaking;
+  speakingInd.classList.toggle('visible', speaking);
+  if (state === 'active') {
+    statusText.textContent = speaking ? '🗣️ 튜터가 말하는 중... / Tutor speaking...' : '🎤 당신 차례! / Your turn!';
+  }
+}
+
+function updateTimer() {
+  const elapsed = Math.floor((Date.now() - callStart) / 1000);
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  callTimer.textContent = `${m}:${s}`;
+}
+
+// AudioWorklet processor source (inline)
+const captureProcessorCode = `
+class CaptureProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._buf = [];
+    this._count = 0;
+    // ~250ms at 16kHz = 4000 samples
+    this._threshold = 4000;
+  }
+  process(inputs) {
+    const input = inputs[0];
+    if (!input || !input[0]) return true;
+    const ch = input[0];
+    for (let i = 0; i < ch.length; i++) {
+      // float32 -> int16
+      let s = Math.max(-1, Math.min(1, ch[i]));
+      this._buf.push(s < 0 ? s * 0x8000 : s * 0x7FFF);
+    }
+    this._count += ch.length;
+    if (this._count >= this._threshold) {
+      const pcm = new Int16Array(this._buf);
+      this.port.postMessage({ pcm: pcm.buffer }, [pcm.buffer]);
+      this._buf = [];
+      this._count = 0;
+    }
+    return true;
+  }
+}
+registerProcessor('capture-processor', CaptureProcessor);
+`;
+
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+async function startMic() {
+  micStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+  micContext = new AudioContext({ sampleRate: 16000 });
+  const blob = new Blob([captureProcessorCode], { type: 'application/javascript' });
+  const url = URL.createObjectURL(blob);
+  await micContext.audioWorklet.addModule(url);
+  URL.revokeObjectURL(url);
+  const source = micContext.createMediaStreamSource(micStream);
+  micWorklet = new AudioWorkletNode(micContext, 'capture-processor');
+  micWorklet.port.onmessage = (e) => {
+    if (ws && ws.readyState === WebSocket.OPEN && state === 'active') {
+      const b64 = arrayBufferToBase64(e.data.pcm);
+      ws.send(JSON.stringify({
+        realtime_input: {
+          media_chunks: [{ data: b64, mime_type: 'audio/pcm;rate=16000' }]
         }
+      }));
+      // Update volume bar from PCM
+      const view = new Int16Array(e.data.pcm);
+      let sum = 0;
+      for (let i = 0; i < view.length; i++) sum += Math.abs(view[i]);
+      const avg = sum / view.length / 32768;
+      if (!isTutorSpeaking) volumeBar.style.width = Math.min(100, avg * 400) + '%';
+    }
+  };
+  source.connect(micWorklet);
+  micWorklet.connect(micContext.destination); // needed to keep worklet alive
+}
 
-        const ASSISTANT_ID = 'af2b7287-5316-4c86-b85d-e29352bc0c85';
-        const API_KEY = '76c3402f-5efc-45ba-9be1-7d313e117f02';
-        
-        let vapiInstance = null;
-        let callActive = false;
-        let timerInterval = null;
-        let seconds = 0;
+function stopMic() {
+  if (micWorklet) { micWorklet.disconnect(); micWorklet = null; }
+  if (micContext) { micContext.close(); micContext = null; }
+  if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
+}
 
-        const btn = document.getElementById('callBtn');
-        const statusEl = document.getElementById('status');
-        const timerEl = document.getElementById('timer');
-        const volumeBar = document.getElementById('volumeBar');
-        const volumeFill = document.getElementById('volumeFill');
+async function playAudioQueue() {
+  if (isPlaying || audioQueue.length === 0) return;
+  isPlaying = true;
+  setTutorSpeaking(true);
 
-        // Init Telegram WebApp if available
-        if (window.Telegram && window.Telegram.WebApp) {
-            Telegram.WebApp.ready();
-            Telegram.WebApp.expand();
-        }
+  if (!playContext) playContext = new AudioContext({ sampleRate: 24000 });
+  if (playContext.state === 'suspended') await playContext.resume();
 
-        function loadVapiSDK() {
-        // Load Vapi SDK via official HTML script tag method
-        (function(d, t) {
-            var g = document.createElement(t),
-                s = d.getElementsByTagName(t)[0];
-            g.src = "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
-            g.defer = true;
-            g.async = true;
-            s.parentNode.insertBefore(g, s);
+  while (audioQueue.length > 0) {
+    const pcmBuf = audioQueue.shift();
+    const int16 = new Int16Array(pcmBuf);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
 
-            g.onload = function() {
-                console.log('Vapi SDK loaded successfully');
-                // Create the instance (this also creates a hidden widget)
-                vapiInstance = window.vapiSDK.run({
-                    apiKey: API_KEY,
-                    assistant: ASSISTANT_ID,
-                    config: {
-                        hide: true, // Hide default button
-                        position: 'bottom-right'
-                    }
-                });
+    const audioBuffer = playContext.createBuffer(1, float32.length, 24000);
+    audioBuffer.getChannelData(0).set(float32);
+    const source = playContext.createBufferSource();
+    source.buffer = audioBuffer;
 
-                // SDK loaded, enable button
-                btn.disabled = false;
-                btn.className = 'call-btn idle';
-                btn.textContent = '🎙️';
-                statusEl.textContent = 'Tap to start';
+    // Analyser for volume
+    const analyser = playContext.createAnalyser();
+    analyser.fftSize = 256;
+    source.connect(analyser);
+    analyser.connect(playContext.destination);
 
-                // Listen for events on the vapiInstance
-                if (vapiInstance) {
-                    vapiInstance.on('call-start', () => {
-                        console.log('Call started');
-                        isStarting = false;
-                        callActive = true;
-                        btn.className = 'call-btn active';
-                        btn.textContent = '⏹️';
-                        statusEl.textContent = 'Connected! Start speaking...';
-                        volumeBar.classList.add('visible');
-                        startTimer();
-                    });
+    const dataArr = new Uint8Array(analyser.frequencyBinCount);
+    const volInterval = setInterval(() => {
+      analyser.getByteFrequencyData(dataArr);
+      let sum = 0;
+      for (let i = 0; i < dataArr.length; i++) sum += dataArr[i];
+      const avg = sum / dataArr.length / 255;
+      volumeBar.style.width = Math.min(100, avg * 300) + '%';
+    }, 50);
 
-                    vapiInstance.on('call-end', () => {
-                        console.log('Call ended');
-                        endCall();
-                    });
+    await new Promise(resolve => {
+      source.onended = () => { clearInterval(volInterval); resolve(); };
+      source.start();
+    });
+  }
 
-                    vapiInstance.on('speech-start', () => {
-                        statusEl.textContent = '🗣️ Tutor is speaking...';
-                    });
+  isPlaying = false;
+  setTutorSpeaking(false);
+  volumeBar.style.width = '0%';
+}
 
-                    vapiInstance.on('speech-end', () => {
-                        statusEl.textContent = '🎤 Your turn! Speak...';
-                    });
+function connectWS() {
+  setState('connecting');
+  ws = new WebSocket(WS_URL);
 
-                    vapiInstance.on('volume-level', (level) => {
-                        volumeFill.style.width = (level * 100) + '%';
-                    });
-
-                    vapiInstance.on('error', (e) => {
-                        console.error('Vapi error:', e);
-                        statusEl.textContent = '❌ Error - tap to retry';
-                        endCall();
-                    });
-                }
-            };
-
-            g.onerror = function() {
-                console.error('Failed to load Vapi SDK');
-                statusEl.textContent = '❌ Failed to load SDK';
-                btn.className = 'call-btn idle';
-                btn.textContent = '🎙️';
-                btn.disabled = false;
-            };
-        })(document, "script");
-        } // end loadVapiSDK
-
-        let isStarting = false;
-
-        // Button click handler
-        btn.addEventListener('click', function() {
-            if (!vapiInstance) {
-                statusEl.textContent = '⚠️ SDK not loaded yet';
-                return;
+  ws.onopen = () => {
+    // Send setup message
+    ws.send(JSON.stringify({
+      setup: {
+        model: MODEL,
+        generation_config: {
+          response_modalities: ['AUDIO'],
+          speech_config: {
+            voice_config: {
+              prebuilt_voice_config: { voice_name: 'Kore' }
             }
-            if (isStarting) {
-                // Allow cancel during connection
-                cancelCall();
-                return;
-            }
-            if (!callActive) {
-                startCall();
-            } else {
-                stopCall();
-            }
-        });
-
-        async function startCall() {
-            isStarting = true;
-            btn.className = 'call-btn connecting';
-            btn.textContent = '⏳';
-            statusEl.textContent = 'Connecting... (up to 30s)';
-            
-            // Progress dots
-            let dots = 0;
-            const progressInterval = setInterval(() => {
-                dots = (dots + 1) % 4;
-                const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                statusEl.textContent = `Connecting${'.'.repeat(dots)} (${elapsed}s)`;
-            }, 1000);
-            const startTime = Date.now();
-
-            try {
-                await vapiInstance.start(ASSISTANT_ID);
-                // call-start event will handle UI update
-            } catch (e) {
-                console.error('Start error:', e);
-                statusEl.textContent = '❌ Failed to connect - tap to retry';
-                btn.className = 'call-btn idle';
-                btn.textContent = '🎙️';
-                isStarting = false;
-            } finally {
-                clearInterval(progressInterval);
-            }
+          }
+        },
+        system_instruction: {
+          parts: [{
+            text: 'You are a friendly English conversation tutor. Help the user practice English conversation naturally. Speak in simple, clear English. If the user speaks Korean, gently guide them to try in English. Give encouragement and corrections when needed. Keep conversations casual and fun.'
+          }]
         }
+      }
+    }));
+  };
 
-        function cancelCall() {
-            if (vapiInstance) {
-                vapiInstance.stop();
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+
+      // Setup complete
+      if (msg.setupComplete) {
+        setState('active');
+        callStart = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+        startMic();
+        return;
+      }
+
+      // Audio data from server
+      if (msg.serverContent) {
+        const sc = msg.serverContent;
+        if (sc.modelTurn && sc.modelTurn.parts) {
+          for (const part of sc.modelTurn.parts) {
+            if (part.inlineData && part.inlineData.data) {
+              const pcm = base64ToArrayBuffer(part.inlineData.data);
+              audioQueue.push(pcm);
+              playAudioQueue();
             }
-            isStarting = false;
-            callActive = false;
-            btn.className = 'call-btn idle';
-            btn.textContent = '🎙️';
-            statusEl.textContent = 'Cancelled - tap to retry';
-            volumeBar.classList.remove('visible');
-            stopTimer();
-            seconds = 0;
+          }
         }
+        if (sc.turnComplete) {
+          // Turn done — audio queue will finish playing
+        }
+      }
+    } catch (e) {
+      console.error('WS message parse error:', e);
+    }
+  };
 
-        function stopCall() {
-            if (vapiInstance) {
-                vapiInstance.stop();
-            }
-            endCall();
-        }
+  ws.onerror = (e) => {
+    console.error('WS error', e);
+    endCall();
+  };
 
-        function endCall() {
-            callActive = false;
-            btn.className = 'call-btn idle';
-            btn.textContent = '🎙️';
-            volumeBar.classList.remove('visible');
-            volumeFill.style.width = '0%';
-            stopTimer();
-            if (seconds > 0) {
-                statusEl.textContent = `Session ended (${formatTime(seconds)})`;
-            } else {
-                statusEl.textContent = 'Tap to start';
-            }
-            seconds = 0;
-        }
+  ws.onclose = () => {
+    if (state === 'active' || state === 'connecting') endCall();
+  };
+}
 
-        function startTimer() {
-            seconds = 0;
-            timerEl.textContent = '00:00';
-            timerInterval = setInterval(() => {
-                seconds++;
-                timerEl.textContent = formatTime(seconds);
-            }, 1000);
-        }
+function endCall() {
+  if (ws) { ws.close(); ws = null; }
+  stopMic();
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  audioQueue = [];
+  isPlaying = false;
+  setState('idle');
+  callTimer.textContent = '00:00';
+}
 
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-        }
+function toggleCall() {
+  if (state === 'idle') {
+    connectWS();
+  } else {
+    endCall();
+  }
+}
 
-        function formatTime(s) {
-            const m = Math.floor(s / 60).toString().padStart(2, '0');
-            const sec = (s % 60).toString().padStart(2, '0');
-            return `${m}:${sec}`;
-        }
-    </script>
+// Telegram WebApp expand
+try { if (window.Telegram && Telegram.WebApp) Telegram.WebApp.expand(); } catch(e) {}
+</script>
 </body>
 </html>
