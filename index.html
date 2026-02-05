@@ -329,37 +329,80 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+function sendAudioChunk(pcmBuffer) {
+  if (session && state === 'active') {
+    const b64 = arrayBufferToBase64(pcmBuffer);
+    try {
+      session.sendRealtimeInput({ media: { data: b64, mimeType: 'audio/pcm;rate=16000' } });
+    } catch (err) {
+      console.error('sendRealtimeInput error:', err);
+    }
+    const view = new Int16Array(pcmBuffer);
+    let sum = 0;
+    for (let i = 0; i < view.length; i++) sum += Math.abs(view[i]);
+    const avg = sum / view.length / 32768;
+    if (!isTutorSpeaking) volumeBar.style.width = Math.min(100, avg * 400) + '%';
+  }
+}
+
+let scriptProcessor = null;
+
 async function startMic() {
   micStream = await navigator.mediaDevices.getUserMedia({ audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true } });
   micContext = new AudioContext({ sampleRate: 16000 });
-  const blob = new Blob([captureProcessorCode], { type: 'application/javascript' });
-  const url = URL.createObjectURL(blob);
-  await micContext.audioWorklet.addModule(url);
-  URL.revokeObjectURL(url);
   const source = micContext.createMediaStreamSource(micStream);
-  micWorklet = new AudioWorkletNode(micContext, 'capture-processor');
-  micWorklet.port.onmessage = (e) => {
-    if (session && state === 'active') {
-      const b64 = arrayBufferToBase64(e.data.pcm);
-      try {
-        session.sendRealtimeInput({ media: { data: b64, mimeType: 'audio/pcm;rate=16000' } });
-      } catch (err) {
-        console.error('sendRealtimeInput error:', err);
-      }
-      // Update volume bar from PCM
-      const view = new Int16Array(e.data.pcm);
-      let sum = 0;
-      for (let i = 0; i < view.length; i++) sum += Math.abs(view[i]);
-      const avg = sum / view.length / 32768;
-      if (!isTutorSpeaking) volumeBar.style.width = Math.min(100, avg * 400) + '%';
+
+  // Try AudioWorklet first, fall back to ScriptProcessorNode for iOS
+  if (micContext.audioWorklet) {
+    try {
+      const blob = new Blob([captureProcessorCode], { type: 'application/javascript' });
+      const url = URL.createObjectURL(blob);
+      await micContext.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      micWorklet = new AudioWorkletNode(micContext, 'capture-processor');
+      micWorklet.port.onmessage = (e) => sendAudioChunk(e.data.pcm);
+      source.connect(micWorklet);
+      micWorklet.connect(micContext.destination);
+      console.log('Mic: AudioWorklet mode');
+      return;
+    } catch (e) {
+      console.warn('AudioWorklet failed, falling back:', e);
     }
+  }
+
+  // Fallback: ScriptProcessorNode (works on iOS Chrome/Safari)
+  console.log('Mic: ScriptProcessor fallback mode');
+  const bufSize = 4096;
+  scriptProcessor = micContext.createScriptProcessor(bufSize, 1, 1);
+  let pcmBuf = [];
+  let sampleCount = 0;
+  const threshold = 4000; // ~250ms at 16kHz
+
+  scriptProcessor.onaudioprocess = (e) => {
+    const input = e.inputBuffer.getChannelData(0);
+    for (let i = 0; i < input.length; i++) {
+      let s = Math.max(-1, Math.min(1, input[i]));
+      pcmBuf.push(s < 0 ? s * 0x8000 : s * 0x7FFF);
+    }
+    sampleCount += input.length;
+    if (sampleCount >= threshold) {
+      const pcm = new Int16Array(pcmBuf);
+      sendAudioChunk(pcm.buffer);
+      pcmBuf = [];
+      sampleCount = 0;
+    }
+    // Output silence to keep processor alive
+    const output = e.outputBuffer.getChannelData(0);
+    for (let i = 0; i < output.length; i++) output[i] = 0;
   };
-  source.connect(micWorklet);
-  micWorklet.connect(micContext.destination);
+
+  source.connect(scriptProcessor);
+  scriptProcessor.connect(micContext.destination);
 }
 
 function stopMic() {
   if (micWorklet) { micWorklet.disconnect(); micWorklet = null; }
+  if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor = null; }
   if (micContext) { micContext.close(); micContext = null; }
   if (micStream) { micStream.getTracks().forEach(t => t.stop()); micStream = null; }
 }
