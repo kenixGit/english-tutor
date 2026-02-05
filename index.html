@@ -329,13 +329,21 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+let audioSentCount = 0;
+
 function sendAudioChunk(pcmBuffer) {
   if (session && state === 'active') {
     const b64 = arrayBufferToBase64(pcmBuffer);
     try {
       session.sendRealtimeInput({ media: { data: b64, mimeType: 'audio/pcm;rate=16000' } });
+      audioSentCount++;
+      // Show progress every 4 chunks (~1 second)
+      if (audioSentCount % 4 === 0 && !isTutorSpeaking) {
+        statusText.textContent = '🎤 말하세요... (' + audioSentCount + ')';
+      }
     } catch (err) {
       console.error('sendRealtimeInput error:', err);
+      showError('전송 오류: ' + (err.message || err));
     }
     const view = new Int16Array(pcmBuffer);
     let sum = 0;
@@ -508,17 +516,18 @@ Keep your responses concise (2-3 sentences max per turn). Be warm and encouragin
 Start the conversation by greeting the user and asking a simple question to get them talking.`,
       callbacks: {
         onmessage: (msg) => {
-          // Setup complete
-          if (msg.setupComplete !== undefined) {
-            console.log('Setup complete');
-            return;
-          }
+          try {
+            // Setup complete
+            if (msg.setupComplete !== undefined) {
+              console.log('Setup complete');
+              return;
+            }
 
-          // Audio data from server
-          if (msg.serverContent) {
-            const sc = msg.serverContent;
-            if (sc.modelTurn && sc.modelTurn.parts) {
-              for (const part of sc.modelTurn.parts) {
+            // Audio data from server
+            if (msg.serverContent) {
+              const sc = msg.serverContent;
+              if (sc.modelTurn && sc.modelTurn.parts) {
+                for (const part of sc.modelTurn.parts) {
                 if (part.inlineData && part.inlineData.data) {
                   const pcm = base64ToArrayBuffer(part.inlineData.data);
                   scheduleAudioChunk(pcm);
@@ -527,19 +536,26 @@ Start the conversation by greeting the user and asking a simple question to get 
             }
             if (sc.turnComplete) {
               // Turn done — audio queue will finish playing
+              console.log('Turn complete');
             }
+          }
+          } catch (msgErr) {
+            console.error('Message handler error:', msgErr);
+            showError('메시지 처리 오류');
           }
         },
         onclose: (e) => {
-          console.log('Session closed', e);
+          const reason = e?.reason || e?.code || JSON.stringify(e) || 'unknown';
+          console.log('Session closed:', reason);
           if (state === 'active' || state === 'connecting') {
-            statusText.textContent = '연결 종료됨 / Disconnected';
-            setTimeout(() => endCall(), 1500);
+            showError('연결 종료: ' + reason);
+            setTimeout(() => endCall(), 2000);
           }
         },
         onerror: (e) => {
-          console.error('Session error', e);
-          showError('연결 오류 / Connection error: ' + (e.message || e));
+          const errMsg = e?.message || e?.error || JSON.stringify(e) || 'unknown';
+          console.error('Session error:', errMsg);
+          showError('오류: ' + errMsg);
           setTimeout(() => endCall(), 2000);
         }
       }
@@ -550,6 +566,7 @@ Start the conversation by greeting the user and asking a simple question to get 
     try {
       await startMic();
       setState('active');
+      audioSentCount = 0;
       callStart = Date.now();
       timerInterval = setInterval(updateTimer, 1000);
       requestWakeLock();
