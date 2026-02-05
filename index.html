@@ -65,6 +65,26 @@
   }
   #volumeBar { height: 100%; width: 0%; background: linear-gradient(90deg, #00c896, #00ffaa); border-radius: 3px; transition: width 0.1s; }
 
+  .volume-slider-container {
+    display: flex; align-items: center; gap: 10px; margin: 8px 0; width: 220px;
+  }
+  .volume-slider-container span { font-size: 18px; }
+  #volumeSlider {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 6px; border-radius: 3px;
+    background: #2a2a4a; outline: none;
+  }
+  #volumeSlider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #00c896; cursor: pointer;
+    box-shadow: 0 0 8px rgba(0,200,150,0.4);
+  }
+  #volumeSlider::-moz-range-thumb {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #00c896; cursor: pointer; border: none;
+  }
+
   .call-controls { display: flex; gap: 32px; margin-top: 20px; align-items: center; }
   #callBtn {
     width: 80px; height: 80px; border-radius: 50%; border: none;
@@ -145,6 +165,11 @@
   <div id="statusText">통화 시작을 탭하세요 / Tap to start</div>
   <div id="errorText"></div>
   <div class="volume-bar-container"><div id="volumeBar"></div></div>
+  <div class="volume-slider-container">
+    <span>🔈</span>
+    <input type="range" id="volumeSlider" min="0" max="100" value="80">
+    <span>🔊</span>
+  </div>
   <div class="speaking-indicator" id="speakingIndicator">
     <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
   </div>
@@ -206,6 +231,7 @@ let micStream = null;
 let micContext = null;
 let micWorklet = null;
 let playContext = null;
+let gainNode = null;
 let timerInterval = null;
 let callStart = 0;
 let audioQueue = [];
@@ -345,7 +371,12 @@ async function playAudioQueue() {
   isPlaying = true;
   setTutorSpeaking(true);
 
-  if (!playContext) playContext = new AudioContext({ sampleRate: 24000 });
+  if (!playContext) {
+    playContext = new AudioContext({ sampleRate: 24000 });
+    gainNode = playContext.createGain();
+    gainNode.gain.value = document.getElementById('volumeSlider').value / 100;
+    gainNode.connect(playContext.destination);
+  }
   if (playContext.state === 'suspended') await playContext.resume();
 
   while (audioQueue.length > 0) {
@@ -362,7 +393,7 @@ async function playAudioQueue() {
     const analyser = playContext.createAnalyser();
     analyser.fftSize = 256;
     source.connect(analyser);
-    analyser.connect(playContext.destination);
+    analyser.connect(gainNode);
 
     const dataArr = new Uint8Array(analyser.frequencyBinCount);
     const volInterval = setInterval(() => {
@@ -480,6 +511,12 @@ function toggleCall() {
     endCall();
   }
 }
+
+// Volume slider
+document.getElementById('volumeSlider').addEventListener('input', (e) => {
+  const vol = e.target.value / 100;
+  if (gainNode) gainNode.gain.value = vol;
+});
 
 // Expose to global for onclick handler
 window.toggleCall = toggleCall;
