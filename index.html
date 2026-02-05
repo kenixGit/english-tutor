@@ -552,6 +552,9 @@ Start the conversation by greeting the user and asking a simple question to get 
       setState('active');
       callStart = Date.now();
       timerInterval = setInterval(updateTimer, 1000);
+      requestWakeLock();
+      startNoSleep();
+      startKeepAlive();
     } catch (micErr) {
       console.error('Mic error:', micErr);
       showError('마이크 오류 / Mic error: ' + micErr.message);
@@ -565,6 +568,64 @@ Start the conversation by greeting the user and asking a simple question to get 
   }
 }
 
+// === Wake Lock & Keep-Alive ===
+let wakeLock = null;
+let keepAliveInterval = null;
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+      console.log('Wake lock acquired');
+    }
+  } catch (e) { console.log('Wake lock not available:', e); }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+}
+
+// NoSleep fallback for iOS: play silent audio to prevent suspension
+let noSleepAudio = null;
+function startNoSleep() {
+  if (noSleepAudio) return;
+  noSleepAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=');
+  noSleepAudio.loop = true;
+  noSleepAudio.volume = 0.001;
+  noSleepAudio.play().catch(() => {});
+}
+function stopNoSleep() {
+  if (noSleepAudio) { noSleepAudio.pause(); noSleepAudio = null; }
+}
+
+// Resume AudioContext if iOS suspends it
+function startKeepAlive() {
+  keepAliveInterval = setInterval(() => {
+    if (micContext && micContext.state === 'suspended') {
+      micContext.resume();
+      console.log('Resumed mic AudioContext');
+    }
+    if (playContext && playContext.state === 'suspended') {
+      playContext.resume();
+      console.log('Resumed play AudioContext');
+    }
+  }, 3000);
+}
+
+function stopKeepAlive() {
+  if (keepAliveInterval) { clearInterval(keepAliveInterval); keepAliveInterval = null; }
+}
+
+// Re-acquire wake lock when page becomes visible again
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && state === 'active') {
+    requestWakeLock();
+    if (micContext && micContext.state === 'suspended') micContext.resume();
+    if (playContext && playContext.state === 'suspended') playContext.resume();
+  }
+});
+
 function endCall() {
   if (session) {
     try { session.close(); } catch (e) { /* ignore */ }
@@ -572,6 +633,9 @@ function endCall() {
   }
   stopMic();
   stopPlayback();
+  stopKeepAlive();
+  stopNoSleep();
+  releaseWakeLock();
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   setState('idle');
   callTimer.textContent = '00:00';
